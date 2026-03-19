@@ -1,212 +1,140 @@
-# 🌾 Crop-Recommendation-ML: Sowing Success with Data
+# Crop Recommendation ML
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-1.x-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
-![Pandas](https://img.shields.io/badge/Pandas-2.x-150458?style=for-the-badge&logo=pandas&logoColor=white)
-![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
-
-> *A machine learning pipeline that identifies the single most predictive soil metric for crop selection — empowering budget-conscious farmers to make data-driven decisions with minimal testing.*
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-1.x-orange?logo=scikit-learn&logoColor=white)
+![Pandas](https://img.shields.io/badge/Pandas-2.x-150458?logo=pandas&logoColor=white)
 
 ---
 
-## 📋 Table of Contents
+## Problem Statement
 
-- [Problem Statement](#-problem-statement)
-- [Dataset](#-dataset)
-- [Exploratory Data Analysis](#-exploratory-data-analysis-eda)
-- [Model Selection Strategy](#-model-selection-strategy)
-- [Evaluation Philosophy: Faithfulness via Dual Metrics](#-evaluation-philosophy-faithfulness-via-dual-metrics)
-- [Final Discovery: The Single Best Feature](#-final-discovery-the-single-best-feature)
-- [How to Run](#-how-to-run)
+Soil testing is a prerequisite for optimal crop selection, yet the cost of measuring every soil metric — nitrogen (N), phosphorous (P), potassium (K), and pH — is prohibitive for smallholder farmers operating under tight budget constraints. This project addresses a practical question: **can a single, affordable soil measurement reliably predict the best crop to plant?**
 
----
+Using the `soil_measures.csv` dataset, the objective is twofold:
 
-## 🌱 Problem Statement
-
-Comprehensive soil analysis is a scientifically rigorous process — but it comes with a price tag that many smallholder farmers simply cannot afford. Measuring nitrogen (N), phosphorous (P), potassium (K), and soil pH individually requires separate testing kits, laboratory fees, or specialist equipment.
-
-**The core question this project answers:**
-
-> *If a farmer can only afford to test for **one** soil metric, which single measurement gives them the highest predictive power for choosing the optimal crop?*
-
-This project builds a multi-class classification system on `soil_measures.csv`, trains individual models per soil feature, and uses rigorous evaluation to surface the single most cost-effective predictor. The result is a practical, budget-aware recommendation that a farmer can act on immediately.
+1. Build multi-class classification models that predict the optimal crop from soil measurements.
+2. Identify the **single most predictive soil feature**, enabling cost-effective, data-driven crop recommendations even when only one measurement can be taken.
 
 ---
 
-## 📊 Dataset
+## Dataset
 
-The dataset `soil_measures.csv` contains soil measurement records, where each row represents a field's soil profile alongside its optimal crop label.
+Each row in `soil_measures.csv` represents a field observation with the following variables:
 
-| Column | Type | Description |
-|---|---|---|
-| `N` | Numeric | Nitrogen content ratio in the soil |
-| `P` | Numeric | Phosphorous content ratio in the soil |
-| `K` | Numeric | Potassium content ratio in the soil |
-| `ph` | Numeric | pH value of the soil |
-| `crop` | Categorical | Target variable — the optimal crop for that field |
-
-The dataset was verified to contain **no missing values**, confirmed via `crops.isna().sum()` — a critical pre-modelling step to ensure pipeline integrity.
+| Feature | Description |
+|---|---|
+| `N` | Nitrogen content ratio in the soil |
+| `P` | Phosphorous content ratio in the soil |
+| `K` | Potassium content ratio in the soil |
+| `ph` | pH value of the soil |
+| `crop` | Target variable — the optimal crop for those soil conditions |
 
 ---
 
-## 🔍 Exploratory Data Analysis (EDA)
+## Exploratory Data Analysis
 
-Before any modelling, a systematic EDA was performed to understand the data's structure and quality:
+Prior to modelling, the dataset was inspected across four dimensions:
 
-- **`crops.head()`** — Verified column naming, data types, and sample records.
-- **`crops.info()`** — Confirmed non-null counts, data types per column, and memory usage.
-- **`crops.describe()`** — Examined the statistical distribution (mean, std, min/max, quartiles) of each soil metric to flag potential outliers and understand feature ranges.
-- **`crops.isna().sum()`** — Confirmed zero missing values across all columns, validating that no imputation strategy was needed.
-
-This grounding step ensured that the features fed into training were clean, correctly typed, and representative of the underlying agricultural domain.
+- **Structure**: `crops.info()` confirmed column data types and the absence of null values, validating the dataset's readiness for direct modelling without imputation.
+- **Descriptive statistics**: `crops.describe()` revealed the range, mean, and spread of each soil metric, informing the choice of evaluation metrics sensitive to class distribution.
+- **Missing value check**: `crops.isna().sum()` confirmed zero missing values across all features.
+- **Class distribution**: The multi-crop target variable spans numerous crop types, making it essential to apply metrics that account for potential imbalance between common and rare crops.
 
 ---
 
-## ⚙️ Model Selection Strategy
+## Model Selection Strategy
 
-### Why `LogisticRegression(multi_class='multinomial')`?
+### Algorithm: Multinomial Logistic Regression
 
-Standard binary logistic regression cannot natively handle problems with more than two classes. This dataset contains **multiple distinct crop types**, making it a true multi-class classification problem.
+For the feature importance analysis, each soil metric was evaluated in isolation using:
 
-The `multi_class='multinomial'` parameter instructs scikit-learn to use the **Softmax (multinomial logistic) formulation** instead of a set of independent one-vs-rest classifiers. This is the correct choice here for several reasons:
+```python
+LogisticRegression(multi_class='multinomial')
+```
 
-1. **Jointly calibrated probabilities**: The softmax function produces a single probability distribution across *all* crop classes simultaneously, ensuring that probabilities sum to 1.0. This gives more coherent and interpretable predictions than independent binary classifiers.
-2. **Cross-class competition**: In multinomial mode, the model learns that predicting "rice" higher necessarily means predicting "maize" lower — a realistic constraint in crop selection where one field grows one crop.
-3. **Single-feature probing**: Because we are evaluating each soil metric (`N`, `P`, `K`, `ph`) in isolation, a linear model like Logistic Regression serves as an ideal, low-variance baseline. It is interpretable, fast, and produces stable results that cleanly reflect each feature's individual signal — without overfitting noise.
+The `multinomial` setting is the correct choice for this problem because the target variable contains more than two crop classes. Rather than reducing the problem to a series of binary one-vs-rest decisions, multinomial logistic regression models the joint probability distribution across all classes simultaneously using a softmax function. This yields a coherent probabilistic output across every crop class in a single model pass, making it both statistically appropriate and computationally efficient for a multi-class classification task.
 
-The training loop iterates over each feature independently:
+### Evaluation Metrics: Weighted F1-Score and Balanced Accuracy
+
+Two metrics were chosen to ensure evaluation is faithful to real-world performance, particularly for underrepresented crops:
+
+**Weighted F1-Score** computes the harmonic mean of precision and recall for each class, then takes a weighted average proportional to class support. This prevents dominant classes from masking poor performance on minority crop types — a critical requirement when certain crops appear far less frequently in the dataset.
+
+**Balanced Accuracy** calculates the average recall across all classes, assigning equal weight to each regardless of how many samples it contains. A model that correctly predicts only majority classes would score poorly on this metric, exposing it as unreliable for budget-conscious agricultural decisions where every crop type matters.
+
+Together, these metrics ensure that a model cannot achieve high scores by ignoring difficult or infrequent crops, producing an honest assessment of predictive power.
+
+### Single-Feature Evaluation Loop
+
+Each of the four soil features (N, P, K, ph) was assessed independently:
 
 ```python
 for feature in ["N", "P", "K", "ph"]:
     log_reg = LogisticRegression(multi_class='multinomial')
     log_reg.fit(X_train[[feature]], y_train)
     y_pred = log_reg.predict(X_test[[feature]])
+
+    f1  = f1_score(y_test, y_pred, average='weighted')
+    bac = balanced_accuracy_score(y_test, y_pred)
 ```
 
-This deliberate single-feature design is the core experimental insight: by isolating each metric, the comparison is fair and direct.
-
-### Visualising the Results
-
-A bar chart (`plt.bar`) was generated to compare the **Weighted F1-Score** of each individual feature, with the y-axis bounded at [0, 1] for consistent perspective across all features. This gave an immediate visual answer to the central question: *which metric stands tallest?*
+Results were collected into a DataFrame sorted in descending order by Weighted F1-Score, with the bar chart in Cell 9 providing an immediate visual comparison of each feature's standalone predictive power.
 
 ---
 
-## 📐 Evaluation Philosophy: Faithfulness via Dual Metrics
-
-The evaluation deliberately combines **two complementary metrics** to guard against misleading conclusions in multi-class settings.
-
-### 1. Weighted F1-Score
+## Final Discovery: The Single Best Predictive Feature
 
 ```python
-f1 = f1_score(y_test, y_pred, average='weighted')
+best_predictive_feature = {best_row['Feature']: best_row['F1-Score']}
 ```
 
-The weighted F1-Score computes the harmonic mean of precision and recall for each class, then aggregates them **weighted by class support** (i.e., how frequently each crop appears in the test set). This penalises a model that achieves high accuracy simply by excelling on common crops while ignoring rare ones.
+The analysis identified **K (Potassium)** as the single most predictive soil metric, achieving the highest Weighted F1-Score of the four features evaluated.
 
-### 2. Balanced Accuracy Score
+This result carries meaningful agricultural significance. Potassium governs a wide range of plant physiological functions — including water regulation, enzyme activation, and resistance to disease and drought stress — and its optimal range varies substantially across crop families. This wide inter-crop variation is precisely why K carries high discriminative power: knowing the potassium level of a field provides strong signal about which crops are viable and which are not.
 
-```python
-bac = balanced_accuracy_score(y_test, y_pred)
-```
-
-Balanced accuracy computes the average recall **across all classes equally**, regardless of how often each crop appears. This is the direct antidote to class imbalance: a model that completely ignores a rare crop will score 0% recall for that class, dragging the balanced accuracy down — even if its overall accuracy looks impressive.
-
-### Why Both Together = "Faithfulness"
-
-Using either metric alone can paint a misleading picture:
-
-| Metric alone | Risk |
-|---|---|
-| Weighted F1 only | May reward ignoring minority crop classes if they are rare enough |
-| Balanced Accuracy only | Does not capture precision — a model can guess freely and still score |
-
-Together, they form a **faithful evaluation framework**: a model must demonstrate both *precision and recall across the full crop distribution* and *equitable performance regardless of crop frequency*. Only a genuinely informative feature can score well on both simultaneously. The results were stored per-feature and ranked by F1-Score to surface the clearest winner:
-
-```python
-results_df = pd.DataFrame(results).sort_values(by='F1-Score', ascending=False)
-```
+For farmers who can only afford one soil test, this finding suggests that a single potassium measurement offers the greatest return on information: an actionable, data-backed crop recommendation at the lowest possible cost.
 
 ---
 
-## 🏆 Final Discovery: The Single Best Feature
+## How to Run
 
-After evaluating all four soil metrics individually, the results were clear:
-
-```python
-best_row = results_df.iloc[0]  # DataFrame sorted by F1-Score descending
-
-best_predictive_feature = {
-    best_row['Feature']: best_row['F1-Score']
-}
-
-print(f"Final Selection: {best_predictive_feature}")
-```
-
-**`{'K': <score>}`** — **Potassium (K)** emerged as the single best predictive feature.
-
-### Agricultural Significance of Potassium (K)
-
-This result is not just a statistical artefact — it is agronomically meaningful:
-
-- **Cellular regulation**: Potassium governs osmotic balance within plant cells, controlling water uptake and drought resilience. Different crops have radically different potassium demands, making K a natural discriminator.
-- **Crop-specific signatures**: Crops like banana, coconut, and grapes are notably high-potassium consumers, while cereals like rice and wheat operate at far lower K levels. This creates distinct, separable clusters in K-space that the model can exploit.
-- **Yield quality, not just quantity**: Unlike nitrogen (which broadly governs vegetative growth across many crop types), potassium's effects are more crop-specific — governing fruit quality, disease resistance, and root development in ways that differ significantly between species.
-- **Practical implication**: A farmer with a single soil-testing budget should **prioritise a potassium test**. The K reading alone provides more information about optimal crop selection than any other individual soil metric in this dataset.
-
----
-
-## 🚀 How to Run
-
-### Prerequisites
-
-All dependencies are drawn directly from the project's `import` statements:
+**Install dependencies:**
 
 ```bash
 pip install pandas scikit-learn matplotlib
 ```
 
-| Library | Version | Purpose |
-|---|---|---|
-| `pandas` | ≥ 1.5 | Data loading, EDA, and results aggregation |
-| `scikit-learn` | ≥ 1.1 | `LogisticRegression`, `train_test_split`, `f1_score`, `balanced_accuracy_score` |
-| `matplotlib` | ≥ 3.5 | Bar chart visualisation of per-feature F1 scores |
+**Dependencies derived from notebook import statements:**
 
-### Running the Notebook
+| Library | Purpose |
+|---|---|
+| `pandas` | Data loading, manipulation, and results tabulation |
+| `scikit-learn` | `LogisticRegression`, `train_test_split`, `f1_score`, `balanced_accuracy_score` |
+| `matplotlib` | Bar chart visualisation of per-feature predictive power |
+
+**Run the notebook:**
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/Crop-Recommendation-ML.git
-cd Crop-Recommendation-ML
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Launch Jupyter
 jupyter notebook notebook.ipynb
 ```
 
-Ensure `soil_measures.csv` is present in the root directory alongside `notebook.ipynb` before running.
+Ensure `soil_measures.csv` is located in the same directory as the notebook before execution.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
-Crop-Recommendation-ML/
-│
-├── notebook.ipynb          # Main analysis notebook
-├── soil_measures.csv       # Dataset (N, P, K, pH, crop)
-├── farmer_in_a_field.jpg   # Cover image
-├── requirements.txt        # Python dependencies
-└── README.md               # This file
+crop-recommendation-ml/
+├── notebook.ipynb          # Full analysis and modelling pipeline
+├── soil_measures.csv       # Input dataset (soil measurements + crop labels)
+└── README.md               # Project documentation
 ```
 
 ---
 
-## 🤝 Acknowledgements
+## Key Takeaways
 
-Dataset sourced as part of a structured ML curriculum. The problem framing — identifying a *single* actionable soil metric — reflects real-world agricultural constraints faced by subsistence and smallholder farmers globally.
-
----
-
-*Built with 🌱 and scikit-learn.*
+- **Multinomial logistic regression** is the statistically correct baseline for joint multi-class classification over more than two target labels.
+- **Weighted F1-Score and Balanced Accuracy** together provide an imbalance-resistant evaluation framework, ensuring performance on rare crops is not obscured.
+- **Potassium (K)** is the most informative single soil metric for crop prediction — a finding with direct, practical value for resource-constrained agricultural decision-making.
